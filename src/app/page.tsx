@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from "react";
+import Image from "next/image";
 
 // Component to show inline edits with strikethrough and colored replacements
 function HighlightedText({ original, edits }: { original: string, edits: EditItem[] }) {
@@ -202,10 +203,12 @@ export default function Page() {
             <div className="flex items-center space-x-4">
               {/* Logo */}
               <div className="relative">
-                <img 
+                <Image 
                   src="/bowen-logo.png" 
                   alt="博文学院 Bowen Academy Logo" 
-                  className="w-20 h-20 object-contain"
+                  width={80}
+                  height={80}
+                  className="object-contain"
                 />
               </div>
               
@@ -421,7 +424,7 @@ Now I always wake up early and I make sure to eat breakfast everyday. I also che
                   <p className="text-sm text-gray-500">No suggestions returned for this run.</p>
                 ) : (
                   <ul className="space-y-4">
-                    {report.report.suggestions.map((s: any, i: number) => (
+                    {report.report.suggestions.map((s: string | object, i: number) => (
                       <li key={i} className="flex items-start gap-3 p-4 bg-blue-50 rounded-xl border border-blue-200">
                         <div className="p-1 bg-blue-600 rounded-full mt-1 flex-shrink-0">
                           <svg
@@ -589,7 +592,7 @@ Now I always wake up early and I make sure to eat breakfast everyday. I also che
                   </div>
               </header>
                 <ul className="space-y-4">
-                  {report.report.strengths.map((s: any, i: number) => (
+                  {report.report.strengths.map((s: string | object, i: number) => (
                     <li key={i} className="flex items-start gap-3 p-4 bg-green-50 rounded-xl border border-green-200">
                       <div className="p-1 bg-green-600 rounded-full mt-1 flex-shrink-0">
                         <svg
@@ -637,7 +640,7 @@ Now I always wake up early and I make sure to eat breakfast everyday. I also che
                   <p className="text-sm text-gray-500">No areas returned.</p>
                 ) : (
                   <ul className="space-y-4">
-                    {report.report.weaknesses.map((w: any, i: number) => (
+                    {report.report.weaknesses.map((w: string | object, i: number) => (
                       <li key={i} className="flex items-start gap-3 p-4 bg-orange-50 rounded-xl border border-orange-200">
                         <div className="p-1 bg-orange-600 rounded-full mt-1 flex-shrink-0">
                           <svg
