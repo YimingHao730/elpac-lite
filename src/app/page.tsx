@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 
 // Component to show inline edits with strikethrough and colored replacements
-function HighlightedText({ original, edits }: { original: string, corrected: string, edits: EditItem[] }) {
+function HighlightedText({ original, edits }: { original: string, edits: EditItem[] }) {
   const [hoveredEdit, setHoveredEdit] = useState<number | null>(null);
   const [mousePosition, setMousePosition] = useState<{ x: number, y: number } | null>(null);
   
@@ -163,7 +163,28 @@ export default function Page() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setReport(data);
+      
+      // Ensure all data is properly formatted
+      const safeData = {
+        corrected_text: typeof data.corrected_text === 'string' ? data.corrected_text : '',
+        edits: Array.isArray(data.edits) ? data.edits : [],
+        report: {
+          strengths: Array.isArray(data.report?.strengths) ? data.report.strengths : [],
+          weaknesses: Array.isArray(data.report?.weaknesses) ? data.report.weaknesses : [],
+          suggestions: Array.isArray(data.report?.suggestions) ? data.report.suggestions : [],
+          elpac_scores: {
+            content_organization: typeof data.report?.elpac_scores?.content_organization === 'number' ? data.report.elpac_scores.content_organization : 0,
+            language_grammar: typeof data.report?.elpac_scores?.language_grammar === 'number' ? data.report.elpac_scores.language_grammar : 0,
+            coherence_cohesion: typeof data.report?.elpac_scores?.coherence_cohesion === 'number' ? data.report.elpac_scores.coherence_cohesion : 0,
+            spelling_mechanics: typeof data.report?.elpac_scores?.spelling_mechanics === 'number' ? data.report.elpac_scores.spelling_mechanics : 0,
+          },
+          predicted_level: typeof data.report?.predicted_level === 'number' ? data.report.predicted_level : 0,
+          predicted_label: typeof data.report?.predicted_label === 'string' ? data.report.predicted_label : '',
+          justification: typeof data.report?.justification === 'string' ? data.report.justification : '',
+        }
+      };
+      
+      setReport(safeData);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to fetch feedback");
     } finally {
@@ -176,6 +197,26 @@ export default function Page() {
       <div className="container mx-auto px-6 py-8 max-w-6xl">
         {/* Header */}
         <div className="text-center mb-8">
+          {/* Company Logo and Name */}
+          <div className="flex items-center justify-center mb-6">
+            <div className="flex items-center space-x-4">
+              {/* Logo */}
+              <div className="relative">
+                <img 
+                  src="/bowen-logo.png" 
+                  alt="博文学院 Bowen Academy Logo" 
+                  className="w-20 h-20 object-contain"
+                />
+              </div>
+              
+              {/* Company Name */}
+              <div className="text-left">
+                <h2 className="text-2xl font-bold text-gray-800">博文学院</h2>
+                <p className="text-sm font-bold italic text-gray-700">Empower Minds, Achieve Excellence!</p>
+              </div>
+            </div>
+          </div>
+          
           <h1 className="text-4xl font-bold text-gray-900 mb-2">ELPAC Writing Assistant</h1>
           <p className="text-lg text-gray-600">Get detailed feedback on your writing with AI-powered analysis</p>
         </div>
@@ -229,9 +270,35 @@ export default function Page() {
 
             {/* Text Input */}
             <div>
-              <label htmlFor="essay-text" className="block text-sm font-semibold text-gray-800 mb-3">
-                Your Essay
-              </label>
+              <div className="flex justify-between items-center mb-3">
+                <label htmlFor="essay-text" className="block text-sm font-semibold text-gray-800">
+                  Your Essay
+                </label>
+                <button
+                  onClick={() => {
+                    const sampleEssay = `My Worst Day Ever
+
+Last week I had the worst day of my life. It started when I wake up late for school. I was so hurry that I forget to eat breakfast and I didn't brush my teeth neither. When I arrive at school I realize I left my homework at home. My teacher was very angry and she give me detention.
+
+During lunch I was sitting with my friends and we was talking about the weekend. Suddenly I spill my milk all over my shirt. Everyone was laughing at me and I feel so embarrassed. I had to go to the nurse office to get a new shirt but they only had pink ones left. I hate pink color.
+
+After school I was walking home when I see a dog running toward me. I was scared because I don't like dogs. The dog was barking loudly and I start to run away. I trip over a rock and fell down. My knee was bleeding and it hurt alot.
+
+When I finally got home my mom was waiting for me. She ask me what happen and I told her everything. She said "don't worry tomorrow will be better day". I hope she is right because I don't want to have another day like this.
+
+This experience taught me that sometimes bad things happen but we must stay positive. Even though it was terrible day I learned to be more careful and prepared for school. I also learned that pink shirts aren't so bad after all.
+
+Now I always wake up early and I make sure to eat breakfast everyday. I also check my homework twice before leaving home. I think this experience made me a better student and person.`;
+                    setUserText(sampleEssay);
+                  }}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-green-500 to-emerald-600 border border-green-600 rounded-lg hover:from-green-600 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 shadow-md hover:shadow-lg"
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Generate Random Essay
+                </button>
+              </div>
               <textarea
                 id="essay-text"
                 value={userText}
@@ -322,7 +389,6 @@ export default function Page() {
               </header>
                 <HighlightedText 
                   original={userText} 
-                  corrected={report.corrected_text} 
                   edits={report.edits || []} 
                 />
               </div>
@@ -355,7 +421,7 @@ export default function Page() {
                   <p className="text-sm text-gray-500">No suggestions returned for this run.</p>
                 ) : (
                   <ul className="space-y-4">
-                    {report.report.suggestions.map((s: string, i: number) => (
+                    {report.report.suggestions.map((s: any, i: number) => (
                       <li key={i} className="flex items-start gap-3 p-4 bg-blue-50 rounded-xl border border-blue-200">
                         <div className="p-1 bg-blue-600 rounded-full mt-1 flex-shrink-0">
                           <svg
@@ -370,7 +436,7 @@ export default function Page() {
                         <path d="M10 0a10 10 0 100 20A10 10 0 0010 0z" />
                       </svg>
                         </div>
-                        <span className="text-gray-800 leading-relaxed">{s}</span>
+                        <span className="text-gray-800 leading-relaxed">{typeof s === 'string' ? s : String(s)}</span>
                     </li>
                   ))}
                 </ul>
@@ -523,7 +589,7 @@ export default function Page() {
                   </div>
               </header>
                 <ul className="space-y-4">
-                  {report.report.strengths.map((s: string, i: number) => (
+                  {report.report.strengths.map((s: any, i: number) => (
                     <li key={i} className="flex items-start gap-3 p-4 bg-green-50 rounded-xl border border-green-200">
                       <div className="p-1 bg-green-600 rounded-full mt-1 flex-shrink-0">
                         <svg
@@ -538,7 +604,7 @@ export default function Page() {
                       <path d="M16.707 5.293a1 1 0 00-1.414 0L9 11.586 6.707 9.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l7-7a1 1 0 000-1.414z" />
                     </svg>
                       </div>
-                      <span className="text-gray-800 leading-relaxed">{s}</span>
+                      <span className="text-gray-800 leading-relaxed">{typeof s === 'string' ? s : String(s)}</span>
                   </li>
                 ))}
               </ul>
@@ -571,7 +637,7 @@ export default function Page() {
                   <p className="text-sm text-gray-500">No areas returned.</p>
                 ) : (
                   <ul className="space-y-4">
-                    {report.report.weaknesses.map((w: string, i: number) => (
+                    {report.report.weaknesses.map((w: any, i: number) => (
                       <li key={i} className="flex items-start gap-3 p-4 bg-orange-50 rounded-xl border border-orange-200">
                         <div className="p-1 bg-orange-600 rounded-full mt-1 flex-shrink-0">
                           <svg
@@ -586,7 +652,7 @@ export default function Page() {
                         <path d="M10 0a10 10 0 100 20A10 10 0 0010 0zm1 5v7H9V5h2zm0 9v2H9v-2h2z" />
                       </svg>
                         </div>
-                        <span className="text-gray-800 leading-relaxed">{w}</span>
+                        <span className="text-gray-800 leading-relaxed">{typeof w === 'string' ? w : String(w)}</span>
                     </li>
                   ))}
                 </ul>
