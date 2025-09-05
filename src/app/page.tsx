@@ -1,14 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { diffWords, Change } from "diff";
-
-type Edit = {
-  original: string;
-  revised: string;
-  reason_en?: string;
-  reason_zh?: string;
-};
 
 type Report = {
   strengths: string[];
@@ -21,14 +13,13 @@ type Report = {
     vocabulary: number;
     cohesion: number;
   };
-  predicted_level: number;      // 1–4
-  predicted_label: string;      // "Level 1/2/3/4"
+  predicted_level: number;   // 1–4
+  predicted_label: string;   // "Level 1/2/3/4"
   justification: string;
 };
 
 type ApiResponse = {
   corrected_text?: string;
-  edits?: unknown;
   report?: Partial<Report>;
   error?: string;
 };
@@ -37,30 +28,14 @@ export default function Home() {
   const [input, setInput] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [corrected, setCorrected] = useState<string>("");
-  const [edits, setEdits] = useState<Edit[]>([]);
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  // 可选：不想要差异高亮时，直接删/注释这个函数与对应的渲染块
-  function renderDiff(a: string, b: string) {
-    const parts: Change[] = diffWords(a, b);
-    return (
-      <p className="leading-7 whitespace-pre-wrap">
-        {parts.map((p, i) => {
-          if (p.added) return <mark key={i} className="px-0.5 rounded-sm" title="Added">{p.value}</mark>;
-          if (p.removed) return <del key={i} className="opacity-70" title="Removed">{p.value}</del>;
-          return <span key={i}>{p.value}</span>;
-        })}
-      </p>
-    );
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
     setCorrected("");
-    setEdits([]);
     setReport(null);
 
     try {
@@ -70,48 +45,37 @@ export default function Home() {
         body: JSON.stringify({ text: input.slice(0, 4000) }),
       });
 
-      // ——更稳健的解析：先取文本，再尝试 JSON.parse
+      // 先拿纯文本，再尝试解析为 JSON，避免非 JSON 时崩溃
       const textBody = await res.text();
       let data: ApiResponse = {};
       try {
-        data = JSON.parse(textBody);
+        data = JSON.parse(textBody) as ApiResponse;
       } catch {
-        // 这里大概率是拿到了 HTML 的错误页（比如过期预览、构建失败等）
-        throw new Error("Server did not return JSON. Response preview: " + textBody.slice(0, 120));
+        throw new Error("Server did not return JSON. Preview: " + textBody.slice(0, 120));
       }
 
       if (!res.ok) throw new Error(data.error || "Request failed");
 
-      // corrected_text / edits 兼容旧结构
       const correctedText = typeof data.corrected_text === "string" ? data.corrected_text : "";
-      const editsArray: Edit[] = Array.isArray(data.edits)
-        ? (data.edits as unknown[]).filter((e): e is Edit =>
-            !!e && typeof e === "object" &&
-            typeof (e as any).original === "string" &&
-            typeof (e as any).revised === "string"
-          )
-        : [];
 
-      // 读取 report（若无则给默认空结构）
-      const r = data.report || {};
+      const r = (data.report ?? {}) as Partial<Report>;
       const safeReport: Report = {
-        strengths: Array.isArray(r.strengths) ? r.strengths as string[] : [],
-        weaknesses: Array.isArray(r.weaknesses) ? r.weaknesses as string[] : [],
-        suggestions: Array.isArray(r.suggestions) ? r.suggestions as string[] : [],
+        strengths: Array.isArray(r.strengths) ? r.strengths : [],
+        weaknesses: Array.isArray(r.weaknesses) ? r.weaknesses : [],
+        suggestions: Array.isArray(r.suggestions) ? r.suggestions : [],
         rubric_scores: {
-          organization: Number(r?.rubric_scores?.organization || 0),
-          development: Number(r?.rubric_scores?.development || 0),
-          language_use_grammar: Number(r?.rubric_scores?.language_use_grammar || 0),
-          vocabulary: Number(r?.rubric_scores?.vocabulary || 0),
-          cohesion: Number(r?.rubric_scores?.cohesion || 0),
+          organization: Number(r?.rubric_scores?.organization ?? 0),
+          development: Number(r?.rubric_scores?.development ?? 0),
+          language_use_grammar: Number(r?.rubric_scores?.language_use_grammar ?? 0),
+          vocabulary: Number(r?.rubric_scores?.vocabulary ?? 0),
+          cohesion: Number(r?.rubric_scores?.cohesion ?? 0),
         },
-        predicted_level: Number(r?.predicted_level || 0),
-        predicted_label: String(r?.predicted_label || ""),
-        justification: String(r?.justification || ""),
+        predicted_level: Number(r?.predicted_level ?? 0),
+        predicted_label: String(r?.predicted_label ?? ""),
+        justification: String(r?.justification ?? ""),
       };
 
       setCorrected(correctedText);
-      setEdits(editsArray);
       setReport(safeReport);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -155,10 +119,6 @@ export default function Home() {
         <section className="space-y-4">
           <h2 className="text-lg font-medium">改写后的文本</h2>
           <div className="p-3 rounded-lg border bg-white whitespace-pre-wrap">{corrected}</div>
-
-          {/* 如果不想显示差异高亮，把下面这一块删掉或注释 */}
-          <h2 className="text-lg font-medium">差异高亮（原文 → 改写）</h2>
-          <div className="p-3 rounded-lg border bg-white">{renderDiff(input, corrected)}</div>
         </section>
       )}
 
