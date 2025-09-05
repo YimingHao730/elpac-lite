@@ -10,6 +10,18 @@ type Edit = {
   reason_zh?: string;
 };
 
+type ApiResponse = {
+  corrected_text?: string;
+  edits?: unknown;
+  error?: string;
+};
+
+function isEdit(e: unknown): e is Edit {
+  if (!e || typeof e !== "object") return false;
+  const o = e as Record<string, unknown>;
+  return typeof o.original === "string" && typeof o.revised === "string";
+}
+
 export default function Home() {
   const [input, setInput] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
@@ -17,39 +29,34 @@ export default function Home() {
   const [edits, setEdits] = useState<Edit[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  function isEdit(e: unknown): e is Edit {
-    if (!e || typeof e !== "object") return false;
-    const obj = e as Record<string, unknown>;
-    return typeof obj.original === "string" && typeof obj.revised === "string";
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
     setCorrected("");
     setEdits([]);
+
     try {
       const res = await fetch("/api/write-lite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: input.slice(0, 4000) }),
       });
-      const data: { corrected_text?: unknown; edits?: unknown } = await res.json();
-      if (!res.ok) throw new Error((data as any)?.error || "Request failed");
+
+      const data: ApiResponse = await res.json();
+      if (!res.ok) throw new Error(data.error || "Request failed");
 
       const correctedText =
         typeof data.corrected_text === "string" ? data.corrected_text : "";
 
-      const editsArray = Array.isArray(data.edits)
-        ? (data.edits.filter(isEdit) as Edit[])
+      const editsArray: Edit[] = Array.isArray(data.edits)
+        ? (data.edits as unknown[]).filter(isEdit)
         : [];
 
       setCorrected(correctedText);
       setEdits(editsArray);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Something went wrong";
-      setError(msg);
+      setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
