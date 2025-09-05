@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 
 // Component to show inline edits with strikethrough and colored replacements
-function HighlightedText({ original, corrected, edits }: { original: string, corrected: string, edits: EditItem[] }) {
+function HighlightedText({ original, edits }: { original: string, corrected: string, edits: EditItem[] }) {
   const [hoveredEdit, setHoveredEdit] = useState<number | null>(null);
   const [mousePosition, setMousePosition] = useState<{ x: number, y: number } | null>(null);
   
@@ -24,7 +24,7 @@ function HighlightedText({ original, corrected, edits }: { original: string, cor
       return posB - posA; // Reverse order
     });
     
-    editOrder.forEach((edit, index) => {
+    editOrder.forEach((edit) => {
       const originalText = edit.original;
       const revisedText = edit.revised;
       
@@ -62,7 +62,7 @@ function HighlightedText({ original, corrected, edits }: { original: string, cor
           dangerouslySetInnerHTML={{ __html: createInlineEdits() }}
           onMouseOver={(e) => {
             const target = e.target as HTMLElement;
-            const editSpan = target.closest('.inline-edit');
+            const editSpan = target.closest('.inline-edit') as HTMLElement;
             if (editSpan) {
               const index = parseInt(editSpan.dataset.editIndex || '0');
               setHoveredEdit(index);
@@ -71,7 +71,7 @@ function HighlightedText({ original, corrected, edits }: { original: string, cor
           }}
           onMouseOut={(e) => {
             const target = e.target as HTMLElement;
-            const editSpan = target.closest('.inline-edit');
+            const editSpan = target.closest('.inline-edit') as HTMLElement;
             if (!editSpan) {
               setHoveredEdit(null);
               setMousePosition(null);
