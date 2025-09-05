@@ -1,14 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { diffWords } from "diff";
+import { diffWords, Change } from "diff";
+
+type Edit = {
+  original: string;
+  revised: string;
+  reason_en?: string;
+  reason_zh?: string;
+};
 
 export default function Home() {
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [corrected, setCorrected] = useState("");
-  const [edits, setEdits] = useState<Array<any>>([]);
+  const [input, setInput] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [corrected, setCorrected] = useState<string>("");
+  const [edits, setEdits] = useState<Edit[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  function isEdit(e: unknown): e is Edit {
+    if (!e || typeof e !== "object") return false;
+    const obj = e as Record<string, unknown>;
+    return typeof obj.original === "string" && typeof obj.revised === "string";
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,21 +33,30 @@ export default function Home() {
       const res = await fetch("/api/write-lite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: input.slice(0, 4000) }), // soft limit
+        body: JSON.stringify({ text: input.slice(0, 4000) }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Request failed");
-      setCorrected(data.corrected_text || "");
-      setEdits(Array.isArray(data.edits) ? data.edits : []);
-    } catch (err: any) {
-      setError(err.message || "Something went wrong");
+      const data: { corrected_text?: unknown; edits?: unknown } = await res.json();
+      if (!res.ok) throw new Error((data as any)?.error || "Request failed");
+
+      const correctedText =
+        typeof data.corrected_text === "string" ? data.corrected_text : "";
+
+      const editsArray = Array.isArray(data.edits)
+        ? (data.edits.filter(isEdit) as Edit[])
+        : [];
+
+      setCorrected(correctedText);
+      setEdits(editsArray);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Something went wrong";
+      setError(msg);
     } finally {
       setLoading(false);
     }
   }
 
   function renderDiff(a: string, b: string) {
-    const parts = diffWords(a, b);
+    const parts: Change[] = diffWords(a, b);
     return (
       <p className="leading-7 whitespace-pre-wrap">
         {parts.map((p, i) => {
@@ -77,7 +99,7 @@ export default function Home() {
         <div className="flex items-center gap-3">
           <button
             disabled={loading || !input.trim()}
-            className="px-4 py-2 rounded-lg border bg-black text-white disabled:opacity-50"
+            className="px-4 py-2 rounded-lg border bg-black text-white disabled:opacity-50 hover:opacity-90 transition"
           >
             {loading ? "正在生成…" : "获取建议"}
           </button>
