@@ -46,8 +46,8 @@ export default function Page() {
       {error && (
         <div className="flex items-start bg-red-50 text-red-700 p-3 rounded-lg border border-red-200">
           <svg
-            width="20"
-            height="20"
+            width="16"
+            height="16"
             viewBox="0 0 20 20"
             className="mr-2 flex-shrink-0 mt-0.5"
             aria-hidden="true"
@@ -100,8 +100,8 @@ export default function Page() {
             <section className="rounded-2xl border border-neutral-200 p-4 shadow-sm bg-white">
               <header className="mb-2 flex items-center gap-2">
                 <svg
-                  width="20"
-                  height="20"
+                  width="16"
+                  height="16"
                   viewBox="0 0 20 20"
                   className="text-blue-600"
                   aria-hidden="true"
@@ -119,8 +119,8 @@ export default function Page() {
                   {report.suggestions.map((s: string, i: number) => (
                     <li key={i} className="flex items-start gap-2">
                       <svg
-                        width="20"
-                        height="20"
+                        width="16"
+                        height="16"
                         viewBox="0 0 20 20"
                         className="text-blue-600 mt-0.5 flex-shrink-0"
                         aria-hidden
@@ -157,8 +157,8 @@ export default function Page() {
             <section className="rounded-2xl border border-neutral-200 p-4 shadow-sm bg-white">
               <header className="mb-2 flex items-center gap-2">
                 <svg
-                  width="20"
-                  height="20"
+                  width="16"
+                  height="16"
                   viewBox="0 0 20 20"
                   className="text-green-600"
                   aria-hidden="true"
@@ -173,8 +173,8 @@ export default function Page() {
                 {report.strengths.map((s: string, i: number) => (
                   <li key={i} className="flex items-start gap-2">
                     <svg
-                      width="20"
-                      height="20"
+                      width="16"
+                      height="16"
                       viewBox="0 0 20 20"
                       className="text-green-600 mt-0.5 flex-shrink-0"
                       aria-hidden
@@ -195,8 +195,8 @@ export default function Page() {
             <section className="rounded-2xl border border-neutral-200 p-4 shadow-sm bg-white">
               <header className="mb-2 flex items-center gap-2">
                 <svg
-                  width="20"
-                  height="20"
+                  width="16"
+                  height="16"
                   viewBox="0 0 20 20"
                   className="text-orange-600"
                   aria-hidden="true"
@@ -214,8 +214,8 @@ export default function Page() {
                   {report.weaknesses.map((w: string, i: number) => (
                     <li key={i} className="flex items-start gap-2">
                       <svg
-                        width="20"
-                        height="20"
+                        width="16"
+                        height="16"
                         viewBox="0 0 20 20"
                         className="text-orange-600 mt-0.5 flex-shrink-0"
                         aria-hidden
