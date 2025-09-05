@@ -14,7 +14,7 @@ export async function POST(req) {
     }
 
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const model = process.env.OPENAI_MODEL || "gpt-4-turbo";
+    const model = process.env.OPENAI_MODEL || "gpt-5";
 
     // 根据年级和任务类型确定评分标准
     const getRubricInfo = (grade, taskType) => {
