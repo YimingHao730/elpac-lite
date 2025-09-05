@@ -13,8 +13,19 @@ export async function POST(req) {
       return new Response(JSON.stringify({ error: "Missing 'text'" }), { status: 400 });
     }
 
+    // 检查API密钥
+    if (!process.env.OPENAI_API_KEY) {
+      console.error("OPENAI_API_KEY is not set");
+      return new Response(
+        JSON.stringify({ error: "OpenAI API key not configured" }), 
+        { status: 500 }
+      );
+    }
+
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const model = process.env.OPENAI_MODEL || "gpt-5";
+    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+    
+    console.log("Using model:", model);
 
     // 根据年级和任务类型确定评分标准
     const getRubricInfo = (grade, taskType) => {
@@ -156,6 +167,7 @@ export async function POST(req) {
       text
     ].join("\n");
 
+    console.log("Making OpenAI API call...");
     const resp = await client.chat.completions.create({
       model,
       response_format: { type: "json_object" },
@@ -163,9 +175,10 @@ export async function POST(req) {
         { role: "system", content: system },
         { role: "user", content: user }
       ],
-      temperature: 0.3,
-      max_tokens: 4000
+      temperature: 1,
+      max_completion_tokens: 4000
     });
+    console.log("OpenAI API response received");
 
     const raw = resp.choices?.[0]?.message?.content || "{}";
     let json;
@@ -236,8 +249,13 @@ export async function POST(req) {
     });
     
   } catch (err) {
+    console.error("Error in write-lite API:", err);
     return new Response(
-      JSON.stringify({ error: err?.message || "Server error" }), 
+      JSON.stringify({ 
+        error: err?.message || "Server error",
+        details: err?.toString(),
+        stack: err?.stack
+      }), 
       { status: 500 }
     );
   }
