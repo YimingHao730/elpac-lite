@@ -1,10 +1,152 @@
 "use client";
 import React, { useState } from "react";
 
+// Component to show inline edits with strikethrough and colored replacements
+function HighlightedText({ original, corrected, edits }: { original: string, corrected: string, edits: EditItem[] }) {
+  const [hoveredEdit, setHoveredEdit] = useState<number | null>(null);
+  const [mousePosition, setMousePosition] = useState<{ x: number, y: number } | null>(null);
+  
+  // Filter out edits where original and revised are the same
+  const actualEdits = edits.filter(edit => edit.original.trim() !== edit.revised.trim());
+  
+  // Create inline edits by replacing original text with corrected text
+  const createInlineEdits = () => {
+    let text = original;
+    
+    if (actualEdits.length === 0) {
+      return text; // No changes to show
+    }
+    
+    // Sort edits by position in text (from end to beginning to avoid position shifts)
+    const editOrder = [...actualEdits].sort((a, b) => {
+      const posA = text.lastIndexOf(a.original);
+      const posB = text.lastIndexOf(b.original);
+      return posB - posA; // Reverse order
+    });
+    
+    editOrder.forEach((edit, index) => {
+      const originalText = edit.original;
+      const revisedText = edit.revised;
+      
+      // Find the original index in actualEdits array
+      const originalIndex = actualEdits.findIndex(e => e.original === edit.original && e.revised === edit.revised);
+      
+      // Escape special regex characters
+      const escapedOriginal = originalText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      
+      // Replace with inline edit markup
+      text = text.replace(
+        new RegExp(escapedOriginal, 'g'),
+        `<span class="inline-edit" data-edit-index="${originalIndex}" style="display: inline-flex; align-items: baseline; margin: 0 2px; vertical-align: baseline;">
+          <span class="original-text" style="text-decoration: line-through; color: #dc2626; background-color: #fef2f2; padding: 1px 4px; border-radius: 3px; margin-right: 4px; display: inline-block;">${originalText}</span>
+          <span class="revised-text" style="color: #15803d; background-color: #f0fdf4; padding: 1px 4px; border-radius: 3px; display: inline-block;">${revisedText}</span>
+        </span>`
+      );
+    });
+    
+    return text;
+  };
+  
+  return (
+    <div className="relative">
+      <div 
+        className="prose max-w-none whitespace-pre-wrap text-sm leading-6 p-4 bg-white rounded-lg border"
+        style={{
+          backgroundColor: 'white',
+          borderRadius: '8px',
+          border: '1px solid #e5e7eb',
+          padding: '16px'
+        }}
+      >
+        <div 
+          dangerouslySetInnerHTML={{ __html: createInlineEdits() }}
+          onMouseOver={(e) => {
+            const target = e.target as HTMLElement;
+            const editSpan = target.closest('.inline-edit');
+            if (editSpan) {
+              const index = parseInt(editSpan.dataset.editIndex || '0');
+              setHoveredEdit(index);
+              setMousePosition({ x: e.clientX, y: e.clientY });
+            }
+          }}
+          onMouseOut={(e) => {
+            const target = e.target as HTMLElement;
+            const editSpan = target.closest('.inline-edit');
+            if (!editSpan) {
+              setHoveredEdit(null);
+              setMousePosition(null);
+            }
+          }}
+        />
+      </div>
+      
+      {/* Tooltip for hovered edit */}
+      {hoveredEdit !== null && actualEdits[hoveredEdit] && mousePosition && (
+        <div 
+          className="fixed bg-gray-900 text-white p-3 rounded-lg shadow-lg z-50 max-w-sm pointer-events-none"
+          style={{
+            backgroundColor: '#111827',
+            color: 'white',
+            padding: '12px',
+            borderRadius: '8px',
+            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+            zIndex: 50,
+            maxWidth: '300px',
+            left: `${mousePosition.x + 10}px`,
+            top: `${mousePosition.y - 10}px`,
+            transform: 'translateY(-100%)'
+          }}
+        >
+          <div style={{ fontSize: '14px' }}>
+            <div style={{ fontWeight: '600', marginBottom: '4px' }}>Why this change?</div>
+            <div style={{ marginBottom: '8px' }}>{actualEdits[hoveredEdit].reason_en}</div>
+            {actualEdits[hoveredEdit].reason_zh && (
+              <div style={{ fontSize: '12px', color: '#d1d5db' }}>{actualEdits[hoveredEdit].reason_zh}</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface EditItem {
+  original: string;
+  revised: string;
+  reason_en: string;
+  reason_zh?: string;
+}
+
+interface ElpacScores {
+  content_organization: number;
+  language_grammar: number;
+  coherence_cohesion: number;
+  spelling_mechanics: number;
+}
+
+interface ReportData {
+  strengths: string[];
+  weaknesses: string[];
+  suggestions: string[];
+  elpac_scores: ElpacScores;
+  predicted_level: number;
+  predicted_label: string;
+  justification: string;
+}
+
+interface ApiResponse {
+  corrected_text: string;
+  edits: EditItem[];
+  report: ReportData;
+}
+
 export default function Page() {
-  const [report, setReport] = useState<any>(null);
+  const [report, setReport] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
+  const [userText, setUserText] = useState<string>("");
+  const [grade, setGrade] = useState<string>("3");
+  const [taskType, setTaskType] = useState<string>("experience");
 
   async function getFeedback() {
     setLoading(true);
@@ -14,94 +156,187 @@ export default function Page() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: "sample text",
-          grade: "5",
-          taskType: "Write About an Experience",
+          text: userText,
+          grade: grade,
+          taskType: taskType,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setReport(data?.report || {});
-    } catch (e: any) {
-      setError(e?.message || "Failed to fetch feedback");
+      setReport(data);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to fetch feedback");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="p-6 mx-auto max-w-4xl space-y-6">
-      {/* Top actions */}
-      <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="container mx-auto px-6 py-8 max-w-6xl">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">ELPAC Writing Assistant</h1>
+          <p className="text-lg text-gray-600">Get detailed feedback on your writing with AI-powered analysis</p>
+        </div>
+
+        {/* Main Content Card */}
+        <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
+          {/* Input Section */}
+          <div className="space-y-6">
+            {/* Grade and Task Type Selection */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div>
+                <label htmlFor="grade-select" className="block text-sm font-semibold text-gray-800 mb-3">
+                  Grade Level
+                </label>
+                <select
+                  id="grade-select"
+                  value={grade}
+                  onChange={(e) => setGrade(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 hover:bg-white"
+                >
+                  <option value="3">Grade 3</option>
+                  <option value="4">Grade 4</option>
+                  <option value="5">Grade 5</option>
+                  <option value="6">Grade 6</option>
+                  <option value="7">Grade 7</option>
+                  <option value="8">Grade 8</option>
+                  <option value="9">Grade 9</option>
+                  <option value="10">Grade 10</option>
+                  <option value="11">Grade 11</option>
+                  <option value="12">Grade 12</option>
+                </select>
+              </div>
+              
+              <div>
+                <label htmlFor="task-type-select" className="block text-sm font-semibold text-gray-800 mb-3">
+                  Task Type
+                </label>
+                <select
+                  id="task-type-select"
+                  value={taskType}
+                  onChange={(e) => setTaskType(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 hover:bg-white"
+                >
+                  <option value="experience">Write About an Experience</option>
+                  <option value="opinion">Justify an Opinion</option>
+                  <option value="picture">Describe a Picture</option>
+                  <option value="academic">Write About Academic Information</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Text Input */}
+            <div>
+              <label htmlFor="essay-text" className="block text-sm font-semibold text-gray-800 mb-3">
+                Your Essay
+              </label>
+              <textarea
+                id="essay-text"
+                value={userText}
+                onChange={(e) => setUserText(e.target.value)}
+                placeholder="Write your essay here... The AI will analyze your writing and provide detailed feedback on grammar, structure, and ELPAC scoring criteria."
+                className="w-full h-64 px-4 py-4 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 resize-vertical text-base leading-relaxed bg-gray-50 hover:bg-white"
+              />
+              <div className="mt-2 text-sm text-gray-500">
+                {userText.trim() ? userText.trim().split(/\s+/).length : 0} words
+              </div>
+            </div>
+            
+            <div className="flex justify-center pt-4">
         <button
           onClick={getFeedback}
-          disabled={loading}
-          className="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium bg-black text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-        >
-          {loading ? "Loading..." : "Get Feedback"}
+                disabled={loading || !userText.trim()}
+                className="inline-flex items-center justify-center px-8 py-4 text-lg font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105 disabled:transform-none"
+              >
+                {loading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Get Detailed Feedback
+                  </>
+                )}
         </button>
+            </div>
+          </div>
       </div>
 
       {/* Error banner */}
       {error && (
-        <div className="flex items-start bg-red-50 text-red-700 p-3 rounded-lg border border-red-200">
+          <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
+            <div className="flex items-start bg-red-50 text-red-700 p-4 rounded-xl border border-red-200">
           <svg
-            width="16"
-            height="16"
+            width="20"
+            height="20"
             viewBox="0 0 20 20"
-            className="mr-2 flex-shrink-0 mt-0.5"
+                className="mr-3 flex-shrink-0 mt-0.5"
             aria-hidden="true"
             focusable="false"
             fill="currentColor"
           >
             <path d="M10 0a10 10 0 100 20A10 10 0 0010 0zm1 5v7H9V5h2zm0 9v2H9v-2h2z" />
           </svg>
+              <div>
+                <h3 className="font-semibold mb-1">Error</h3>
           <span className="text-sm">{error}</span>
+              </div>
+            </div>
         </div>
       )}
 
+        {/* Results Section */}
       {report && (
-        <div className="grid gap-4">
-          {/* Corrected Text */}
+          <div className="space-y-8">
+            {/* Text Comparison */}
           {report.corrected_text && (
-            <section className="rounded-2xl border border-neutral-200 p-4 shadow-sm bg-white">
-              <header className="mb-2 flex items-center gap-2">
-                <h2 className="text-base font-semibold">Corrected Text</h2>
+              <div className="bg-white rounded-2xl shadow-xl p-8">
+                <header className="mb-6 flex items-center gap-3">
+                  <div className="p-2 bg-indigo-100 rounded-lg">
+                    <svg
+                      width="24"
+                      height="24"
+                      viewBox="0 0 20 20"
+                      className="text-indigo-600"
+                      aria-hidden="true"
+                      focusable="false"
+                      fill="currentColor"
+                    >
+                      <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
+                      <path fillRule="evenodd" d="M4 5a2 2 0 012-2v1a1 1 0 102 0V3h4a1 1 0 100 2v1a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">Text with Inline Edits</h2>
+                    <p className="text-sm text-gray-600">Hover over highlighted changes to see explanations</p>
+                  </div>
               </header>
-              <div className="prose max-w-none whitespace-pre-wrap text-sm leading-6">
-                {report.corrected_text}
+                <HighlightedText 
+                  original={userText} 
+                  corrected={report.corrected_text} 
+                  edits={report.edits || []} 
+                />
               </div>
-            </section>
-          )}
+            )}
 
-          {/* Key Corrections */}
-          {Array.isArray(report.edits) && report.edits.length > 0 && (
-            <section className="rounded-2xl border border-neutral-200 p-4 shadow-sm bg-white">
-              <header className="mb-2 flex items-center gap-2">
-                <h2 className="text-base font-semibold">Key Corrections</h2>
-              </header>
-              <ul className="list-disc pl-5 space-y-3 text-sm">
-                {report.edits.map((e: any, i: number) => (
-                  <li key={i}>
-                    <div><span className="font-semibold">ORIGINAL:</span> {e.original}</div>
-                    <div><span className="font-semibold">REVISED:</span> {e.revised}</div>
-                    <div><span className="font-semibold">Why:</span> {e.why}</div>
-                    {e.explanation_cn && (
-                      <div><span className="font-semibold">解释:</span> {e.explanation_cn}</div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
 
-          {/* Suggestions - moved up for visibility */}
-          {Array.isArray(report.suggestions) && (
-            <section className="rounded-2xl border border-neutral-200 p-4 shadow-sm bg-white">
-              <header className="mb-2 flex items-center gap-2">
-                <svg
-                  width="16"
-                  height="16"
+            {/* Suggestions */}
+            {Array.isArray(report.report?.suggestions) && (
+              <div className="bg-white rounded-2xl shadow-xl p-8">
+                <header className="mb-6 flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <svg
+                      width="24"
+                      height="24"
                   viewBox="0 0 20 20"
                   className="text-blue-600"
                   aria-hidden="true"
@@ -110,55 +345,169 @@ export default function Page() {
                 >
                   <path d="M2 10a8 8 0 1116 0 8 8 0 01-16 0zm9-3H9v4h2V7zm0 5H9v2h2v-2z" />
                 </svg>
-                <h2 className="text-base font-semibold">Suggestions</h2>
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">Suggestions</h2>
+                    <p className="text-sm text-gray-600">Actionable strategies to improve your writing</p>
+                  </div>
               </header>
-              {report.suggestions.length === 0 ? (
-                <p className="text-sm text-neutral-500">No suggestions returned for this run.</p>
-              ) : (
-                <ul className="list-disc pl-5 space-y-2 text-sm">
-                  {report.suggestions.map((s: string, i: number) => (
-                    <li key={i} className="flex items-start gap-2">
-                      <svg
-                        width="16"
-                        height="16"
+                {report.report.suggestions.length === 0 ? (
+                  <p className="text-sm text-gray-500">No suggestions returned for this run.</p>
+                ) : (
+                  <ul className="space-y-4">
+                    {report.report.suggestions.map((s: string, i: number) => (
+                      <li key={i} className="flex items-start gap-3 p-4 bg-blue-50 rounded-xl border border-blue-200">
+                        <div className="p-1 bg-blue-600 rounded-full mt-1 flex-shrink-0">
+                          <svg
+                            width="12"
+                            height="12"
                         viewBox="0 0 20 20"
-                        className="text-blue-600 mt-0.5 flex-shrink-0"
+                            className="text-white"
                         aria-hidden
                         focusable="false"
                         fill="currentColor"
                       >
                         <path d="M10 0a10 10 0 100 20A10 10 0 0010 0z" />
                       </svg>
-                      <span>{s}</span>
+                        </div>
+                        <span className="text-gray-800 leading-relaxed">{s}</span>
                     </li>
                   ))}
                 </ul>
               )}
-            </section>
-          )}
+              </div>
+            )}
+
+            {/* ELPAC Assessment */}
+            {report.report && (
+              <div className="bg-white rounded-2xl shadow-xl p-8">
+                <header className="mb-6 flex items-center gap-3">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <svg
+                      width="24"
+                      height="24"
+                      viewBox="0 0 20 20"
+                      className="text-purple-600"
+                      aria-hidden="true"
+                      focusable="false"
+                      fill="currentColor"
+                    >
+                      <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">ELPAC Assessment</h2>
+                    <p className="text-sm text-gray-600">Official scoring and performance analysis</p>
+                  </div>
+                </header>
+              
+                {/* Predicted Level */}
+                <div className="mb-6 p-6 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl border border-purple-200">
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="text-lg font-semibold text-purple-800">Overall Level:</span>
+                    <span className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-lg font-bold rounded-lg shadow-md">
+                      Level {report.report.predicted_level}
+                    </span>
+                    <span className="text-lg font-medium text-purple-800">
+                      ({report.report.predicted_label})
+                    </span>
+                  </div>
+                  <p className="text-gray-700 leading-relaxed">{report.report.justification}</p>
+                </div>
 
           {/* Rubric Scores */}
-          {report.elpac_scores && (
-            <section className="rounded-2xl border border-neutral-200 p-4 shadow-sm bg-white">
-              <header className="mb-2 flex items-center gap-2">
-                <h2 className="text-base font-semibold">Rubric Scores</h2>
-              </header>
-              <ul className="list-disc pl-5 space-y-1 text-sm">
-                <li>Content Organization: {report.elpac_scores.content_organization}/4</li>
-                <li>Language Grammar: {report.elpac_scores.language_grammar}/4</li>
-                <li>Coherence Cohesion: {report.elpac_scores.coherence_cohesion}/4</li>
-                <li>Spelling Mechanics: {report.elpac_scores.spelling_mechanics}/4</li>
-              </ul>
-            </section>
+                <div className="space-y-4">
+                  <div className="p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl border border-gray-200">
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="font-semibold text-gray-800">Content Organization</span>
+                      <span className={`px-3 py-1 text-white font-bold rounded-lg text-lg ${
+                        report.report.elpac_scores.content_organization === 4 ? 'bg-green-600' :
+                        report.report.elpac_scores.content_organization === 3 ? 'bg-blue-600' :
+                        report.report.elpac_scores.content_organization === 2 ? 'bg-yellow-600' :
+                        report.report.elpac_scores.content_organization === 1 ? 'bg-orange-600' :
+                        'bg-red-600'
+                      }`}>{report.report.elpac_scores.content_organization}/4</span>
+                    </div>
+                    <div className="text-sm text-gray-700 leading-relaxed">
+                      {report.report.elpac_scores.content_organization === 4 && "✓ Fully addresses task with complete details and logical flow"}
+                      {report.report.elpac_scores.content_organization === 3 && "✓ Generally addresses task with some details and mostly logical flow"}
+                      {report.report.elpac_scores.content_organization === 2 && "⚠ Partially addresses task with limited details and somewhat logical flow"}
+                      {report.report.elpac_scores.content_organization === 1 && "⚠ Limited task addressing with minimal details and unclear flow"}
+                      {report.report.elpac_scores.content_organization === 0 && "✗ Does not address task or lacks coherence"}
+                    </div>
+                  </div>
+                
+                  <div className="p-4 bg-gradient-to-r from-gray-50 to-green-50 rounded-xl border border-gray-200">
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="font-semibold text-gray-800">Language Grammar</span>
+                      <span className={`px-3 py-1 text-white font-bold rounded-lg text-lg ${
+                        report.report.elpac_scores.language_grammar === 4 ? 'bg-green-600' :
+                        report.report.elpac_scores.language_grammar === 3 ? 'bg-blue-600' :
+                        report.report.elpac_scores.language_grammar === 2 ? 'bg-yellow-600' :
+                        report.report.elpac_scores.language_grammar === 1 ? 'bg-orange-600' :
+                        'bg-red-600'
+                      }`}>{report.report.elpac_scores.language_grammar}/4</span>
+                    </div>
+                    <div className="text-sm text-gray-700 leading-relaxed">
+                      {report.report.elpac_scores.language_grammar === 4 && "✓ Varied and effective grammar with minor errors that don't impede meaning"}
+                      {report.report.elpac_scores.language_grammar === 3 && "✓ Generally effective grammar with some errors that may impede meaning"}
+                      {report.report.elpac_scores.language_grammar === 2 && "⚠ Somewhat effective grammar with frequent errors that impede meaning"}
+                      {report.report.elpac_scores.language_grammar === 1 && "⚠ Limited grammar effectiveness with frequent errors preventing expression"}
+                      {report.report.elpac_scores.language_grammar === 0 && "✗ Severe grammar limitations preventing communication"}
+                    </div>
+                  </div>
+                  
+                  <div className="p-4 bg-gradient-to-r from-gray-50 to-yellow-50 rounded-xl border border-gray-200">
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="font-semibold text-gray-800">Coherence Cohesion</span>
+                      <span className={`px-3 py-1 text-white font-bold rounded-lg text-lg ${
+                        report.report.elpac_scores.coherence_cohesion === 4 ? 'bg-green-600' :
+                        report.report.elpac_scores.coherence_cohesion === 3 ? 'bg-blue-600' :
+                        report.report.elpac_scores.coherence_cohesion === 2 ? 'bg-yellow-600' :
+                        report.report.elpac_scores.coherence_cohesion === 1 ? 'bg-orange-600' :
+                        'bg-red-600'
+                      }`}>{report.report.elpac_scores.coherence_cohesion}/4</span>
+                    </div>
+                    <div className="text-sm text-gray-700 leading-relaxed">
+                      {report.report.elpac_scores.coherence_cohesion === 4 && "✓ Readily coherent with well-developed connections between ideas"}
+                      {report.report.elpac_scores.coherence_cohesion === 3 && "✓ Mostly coherent with generally clear connections between ideas"}
+                      {report.report.elpac_scores.coherence_cohesion === 2 && "⚠ Somewhat coherent with limited connections between ideas"}
+                      {report.report.elpac_scores.coherence_cohesion === 1 && "⚠ Limited coherence with unclear connections between ideas"}
+                      {report.report.elpac_scores.coherence_cohesion === 0 && "✗ Lacks coherence with no clear connections between ideas"}
+                    </div>
+                  </div>
+                  
+                  <div className="p-4 bg-gradient-to-r from-gray-50 to-red-50 rounded-xl border border-gray-200">
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="font-semibold text-gray-800">Spelling Mechanics</span>
+                      <span className={`px-3 py-1 text-white font-bold rounded-lg text-lg ${
+                        report.report.elpac_scores.spelling_mechanics === 4 ? 'bg-green-600' :
+                        report.report.elpac_scores.spelling_mechanics === 3 ? 'bg-blue-600' :
+                        report.report.elpac_scores.spelling_mechanics === 2 ? 'bg-yellow-600' :
+                        report.report.elpac_scores.spelling_mechanics === 1 ? 'bg-orange-600' :
+                        'bg-red-600'
+                      }`}>{report.report.elpac_scores.spelling_mechanics}/4</span>
+                    </div>
+                    <div className="text-sm text-gray-700 leading-relaxed">
+                      {report.report.elpac_scores.spelling_mechanics === 4 && "✓ Accurate spelling, punctuation, and capitalization"}
+                      {report.report.elpac_scores.spelling_mechanics === 3 && "✓ Generally accurate spelling, punctuation, and capitalization"}
+                      {report.report.elpac_scores.spelling_mechanics === 2 && "⚠ Somewhat accurate spelling, punctuation, and capitalization"}
+                      {report.report.elpac_scores.spelling_mechanics === 1 && "⚠ Limited accuracy in spelling, punctuation, and capitalization"}
+                      {report.report.elpac_scores.spelling_mechanics === 0 && "✗ Severe limitations in spelling, punctuation, and capitalization"}
+                    </div>
+                  </div>
+                </div>
+              </div>
           )}
 
           {/* Strengths */}
-          {Array.isArray(report.strengths) && report.strengths.length > 0 && (
-            <section className="rounded-2xl border border-neutral-200 p-4 shadow-sm bg-white">
-              <header className="mb-2 flex items-center gap-2">
-                <svg
-                  width="16"
-                  height="16"
+            {Array.isArray(report.report?.strengths) && report.report.strengths.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-xl p-8">
+                <header className="mb-6 flex items-center gap-3">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <svg
+                      width="24"
+                      height="24"
                   viewBox="0 0 20 20"
                   className="text-green-600"
                   aria-hidden="true"
@@ -167,36 +516,43 @@ export default function Page() {
                 >
                   <path d="M16.707 5.293a1 1 0 00-1.414 0L9 11.586 6.707 9.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l7-7a1 1 0 000-1.414z" />
                 </svg>
-                <h2 className="text-base font-semibold">Strengths</h2>
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">Strengths</h2>
+                    <p className="text-sm text-gray-600">What you did well in your writing</p>
+                  </div>
               </header>
-              <ul className="list-disc pl-5 space-y-2 text-sm">
-                {report.strengths.map((s: string, i: number) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <svg
-                      width="16"
-                      height="16"
+                <ul className="space-y-4">
+                  {report.report.strengths.map((s: string, i: number) => (
+                    <li key={i} className="flex items-start gap-3 p-4 bg-green-50 rounded-xl border border-green-200">
+                      <div className="p-1 bg-green-600 rounded-full mt-1 flex-shrink-0">
+                        <svg
+                          width="12"
+                          height="12"
                       viewBox="0 0 20 20"
-                      className="text-green-600 mt-0.5 flex-shrink-0"
+                          className="text-white"
                       aria-hidden
                       focusable="false"
                       fill="currentColor"
                     >
                       <path d="M16.707 5.293a1 1 0 00-1.414 0L9 11.586 6.707 9.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l7-7a1 1 0 000-1.414z" />
                     </svg>
-                    <span>{s}</span>
+                      </div>
+                      <span className="text-gray-800 leading-relaxed">{s}</span>
                   </li>
                 ))}
               </ul>
-            </section>
+              </div>
           )}
 
           {/* Areas for Improvement */}
-          {Array.isArray(report.weaknesses) && (
-            <section className="rounded-2xl border border-neutral-200 p-4 shadow-sm bg-white">
-              <header className="mb-2 flex items-center gap-2">
-                <svg
-                  width="16"
-                  height="16"
+            {Array.isArray(report.report?.weaknesses) && (
+              <div className="bg-white rounded-2xl shadow-xl p-8">
+                <header className="mb-6 flex items-center gap-3">
+                  <div className="p-2 bg-orange-100 rounded-lg">
+                    <svg
+                      width="24"
+                      height="24"
                   viewBox="0 0 20 20"
                   className="text-orange-600"
                   aria-hidden="true"
@@ -205,34 +561,41 @@ export default function Page() {
                 >
                   <path d="M10 0a10 10 0 100 20A10 10 0 0010 0zm1 5v7H9V5h2zm0 9v2H9v-2h2z" />
                 </svg>
-                <h2 className="text-base font-semibold">Areas for Improvement</h2>
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">Areas for Improvement</h2>
+                    <p className="text-sm text-gray-600">Specific areas to focus on for better writing</p>
+                  </div>
               </header>
-              {report.weaknesses.length === 0 ? (
-                <p className="text-sm text-neutral-500">No areas returned.</p>
-              ) : (
-                <ul className="list-disc pl-5 space-y-2 text-sm">
-                  {report.weaknesses.map((w: string, i: number) => (
-                    <li key={i} className="flex items-start gap-2">
-                      <svg
-                        width="16"
-                        height="16"
+                {report.report.weaknesses.length === 0 ? (
+                  <p className="text-sm text-gray-500">No areas returned.</p>
+                ) : (
+                  <ul className="space-y-4">
+                    {report.report.weaknesses.map((w: string, i: number) => (
+                      <li key={i} className="flex items-start gap-3 p-4 bg-orange-50 rounded-xl border border-orange-200">
+                        <div className="p-1 bg-orange-600 rounded-full mt-1 flex-shrink-0">
+                          <svg
+                            width="12"
+                            height="12"
                         viewBox="0 0 20 20"
-                        className="text-orange-600 mt-0.5 flex-shrink-0"
+                            className="text-white"
                         aria-hidden
                         focusable="false"
                         fill="currentColor"
                       >
                         <path d="M10 0a10 10 0 100 20A10 10 0 0010 0zm1 5v7H9V5h2zm0 9v2H9v-2h2z" />
                       </svg>
-                      <span>{w}</span>
+                        </div>
+                        <span className="text-gray-800 leading-relaxed">{w}</span>
                     </li>
                   ))}
                 </ul>
               )}
-            </section>
+              </div>
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }
